@@ -131,6 +131,10 @@ class App:
             last_processed_row = idx
         self.update_last_processed_row(last_processed_row)
 
+    def parse_row(self, idx: int, row: Series):
+        """Parse row into a document."""
+        raise NotImplementedError("Please sub-class and implement this method.")
+
 
 class COTS2021(App):
     """Implement parsing for COTS 2021."""
