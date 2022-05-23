@@ -7,11 +7,11 @@ from urllib.parse import urlencode
 import google.auth
 import pandas as pd
 from docx import Document
+from google.cloud import firestore
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload
 from pandas import Series
-from google.cloud import firestore
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +96,7 @@ class App:
             last_processed_row = idx
         self.update_last_processed_row(last_processed_row)
 
-    def parse_row(self, idx: int, row: Series):
+    def parse_row(self, idx: int, row: Series) -> None:
         """Parse row into a document."""
         raise NotImplementedError("Please sub-class and implement this method.")
 
