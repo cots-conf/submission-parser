@@ -1,20 +1,17 @@
-"""Parse rows from form's response."""
 import logging
 import os
 from tempfile import NamedTemporaryFile
 from time import sleep
 from urllib.parse import urlencode
 
-import firebase_admin
 import google.auth
 import pandas as pd
 from docx import Document
-from dotenv import load_dotenv
-from firebase_admin import credentials, firestore
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload
 from pandas import Series
+from google.cloud import firestore
 
 logger = logging.getLogger(__name__)
 
@@ -42,41 +39,15 @@ class App:
 
     def _init_storage(self) -> None:
         """Configure the working storage."""
-        if self.config["working_storage"]["type"] == "firebase":
-            firebase_cred = credentials.Certificate(
-                self.config["working_storage"]["firebase"]["cred"]
-            )
-            firebase_admin.initialize_app(
-                firebase_cred,
-                {"projectId": self.config["working_storage"]["firebase"]["project_id"]},
-            )
-            self.db = firestore.client()
+        self.db = firestore.Client()
 
     def _load_config(self) -> dict:
         """Load the configuration."""
         config = {}
         config["form_response_id"] = os.getenv("APP_FORM_RESPONSE_ID")
         config["sheet_name"] = os.getenv("APP_SHEET_NAME")
-
-        working_storage_type = os.getenv("WORKING_STORAGE_TYPE", "file")
-        config["working_storage"] = {}
-        config["working_storage"]["type"] = working_storage_type
-        if working_storage_type == "firebase":
-            logger.info(f"Working storage type: {working_storage_type}")
-            config["working_storage"]["firebase"] = {}
-            config["working_storage"]["firebase"]["cred"] = os.getenv(
-                "GOOGLE_APPLICATION_CREDENTIALS"
-            )
-            config["working_storage"]["firebase"]["project_id"] = os.getenv(
-                "FIREBASE_PROJECT_ID"
-            )
-            config["working_storage"]["firebase"]["collection_name"] = os.getenv(
-                "WORKING_COLLECTION_NAME"
-            )
-            config["working_storage"]["firebase"]["document_name"] = os.getenv(
-                "WORKING_DOCUMENT_NAME"
-            )
-
+        config["collection_name"] = os.getenv("WORKING_COLLECTION_NAME")
+        config["document_name"] = os.getenv("WORKING_DOCUMENT_NAME")
         return config
 
     def _create_csv_url(self, sheet_id: str, sheet_name: str) -> str:
@@ -87,27 +58,21 @@ class App:
 
     def get_last_processed_row(self) -> int:
         """Retrieve the last processed row index."""
-        if self.config["working_storage"]["type"] == "firebase":
-            collection_name = self.config["working_storage"]["firebase"][
-                "collection_name"
-            ]
-            document_name = self.config["working_storage"]["firebase"]["document_name"]
-            logger.debug(f"Getting {collection_name}.{document_name} from firebase")
+        collection_name = self.config["collection_name"]
+        document_name = self.config["document_name"]
+        logger.debug(f"Getting {collection_name}.{document_name} from firestore")
 
-            doc_ref = self.db.collection(collection_name).document(document_name).get()
-            doc = doc_ref.to_dict()
-            return doc["last_processed_row"]
+        doc_ref = self.db.collection(collection_name).document(document_name).get()
+        doc = doc_ref.to_dict()
+        return doc["last_processed_row"]
 
     def update_last_processed_row(self, row_idx: int) -> None:
         """Write last processed row index back to the storage."""
-        if self.config["working_storage"]["type"] == "firebase":
-            collection_name = self.config["working_storage"]["firebase"][
-                "collection_name"
-            ]
-            document_name = self.config["working_storage"]["firebase"]["document_name"]
-            self.db.collection(collection_name).document(document_name).set(
-                {"last_processed_row": row_idx}
-            )
+        collection_name = self.config["collection_name"]
+        document_name = self.config["document_name"]
+        self.db.collection(collection_name).document(document_name).set(
+            {"last_processed_row": row_idx}
+        )
 
     def parse(self) -> None:
         """Parse the rows from the response sheet."""
@@ -120,7 +85,7 @@ class App:
         last_processed_row = self.get_last_processed_row()
         logger.debug(f"Columns of the responses: {df.columns.values.tolist()}")
 
-        # E203 of flake8 is fighting with black.
+        # Ignore E203 b/c flake8 is fighting with black.
         to_be_processed = df.iloc[last_processed_row + 1 :]  # noqa: E203
         logger.info(f"Found {to_be_processed.shape[0]} new rows")
 
@@ -269,6 +234,5 @@ class COTS2021(App):
 
 
 if __name__ == "__main__":
-    load_dotenv()
     app = COTS2021()
     app.parse()
